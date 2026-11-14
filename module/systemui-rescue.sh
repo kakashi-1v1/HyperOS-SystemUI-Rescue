@@ -1,23 +1,23 @@
 #!/system/bin/sh
-# kashi_rescue - SystemUI / SystemUI plugin crash-loop watchdog (root, KernelSU/Magisk module).
+# systemui-rescue - SystemUI / SystemUI plugin crash-loop watchdog (root, KernelSU/Magisk module).
 #
 # Event driven (blocks on the crash log, no polling). After STABLE seconds without a SystemUI crash, the installed SystemUI apk and the plugin update
-# (/data/app) are copied to /data/adb/kashi_rescue/good as "last good".
+# (/data/app) are copied to /data/adb/systemui_rescue/good as "last good".
 # When SystemUI crash-loops (LOOP_COUNT crashes within LOOP_WINDOW seconds) it saves the crash log,
 # puts back the last good copy of whichever of the two changed most
 # recently, restarts SystemUI and posts a notification. Still looping -> the other one. No good plugin
 # copy -> the plugin update is removed (stock /product plugin).
 #
 # Commands (as root):
-#   sh kashi_rescue.sh daemon          watchdog loop (started by service.sh)
-#   sh kashi_rescue.sh status          what is installed vs. saved, last log lines
-#   sh kashi_rescue.sh save            save the current SystemUI + plugin as last good now
-#   sh kashi_rescue.sh restore-sysui   put back the good SystemUI now
-#   sh kashi_rescue.sh restore-plugin  put back the good plugin now
-#   sh kashi_rescue.sh stock-plugin    remove the plugin update (stock plugin)
-# Pause: touch /data/adb/kashi_rescue/disable   (rm it to resume)
+#   sh systemui-rescue.sh daemon          watchdog loop (started by service.sh)
+#   sh systemui-rescue.sh status          what is installed vs. saved, last log lines
+#   sh systemui-rescue.sh save            save the current SystemUI + plugin as last good now
+#   sh systemui-rescue.sh restore-sysui   put back the good SystemUI now
+#   sh systemui-rescue.sh restore-plugin  put back the good plugin now
+#   sh systemui-rescue.sh stock-plugin    remove the plugin update (stock plugin)
+# Pause: touch /data/adb/systemui_rescue/disable   (rm it to resume)
 
-D=/data/adb/kashi_rescue
+D=/data/adb/systemui_rescue
 G=$D/good
 LOG=$D/rescue.log
 SUI=com.android.systemui
@@ -39,7 +39,7 @@ stamp() { [ -f "$1" ] && echo "$1|$(stat -c '%s:%Y' "$1")"; }
 mtime_of() { stat -c '%Y' "$1" 2>/dev/null || echo 0; }
 
 notify() {
-  cmd notification post -S bigtext -t "SystemUI rescue" kashi_rescue "$1" >/dev/null 2>&1
+  cmd notification post -S bigtext -t "SystemUI Rescue" systemui_rescue "$1" >/dev/null 2>&1
 }
 
 restart_sui() {
@@ -324,7 +324,7 @@ status() {
 }
 
 [ "$(id -u)" = "0" ] || { echo "run as root"; exit 1; }
-[ -n "$KASHI_RESCUE_LIB" ] && return 0 2>/dev/null
+[ -n "$SYSUI_RESCUE_LIB" ] && return 0 2>/dev/null
 case "$1" in
   daemon) daemon ;;
   save) STABLE=0; save_good; status ;;

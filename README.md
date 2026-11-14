@@ -15,14 +15,14 @@ use. It runs at the lowest priority; the only resident process is one sleeping `
 
 **Saving the last good versions.** A short check runs 5 minutes after boot and then every 10 minutes.
 If SystemUI has not crashed for 5 minutes and is running, the installed SystemUI apk and the plugin
-update (only when it is an update in `/data/app`) are copied to `/data/adb/kashi_rescue/good/`.
+update (only when it is an update in `/data/app`) are copied to `/data/adb/systemui_rescue/good/`.
 A stamp (path, size, modification time) next to each copy means an apk is only copied again after you
 install a new one.
 
 **Crash loop = 3 SystemUI crashes within 2 minutes** (Java crashes and native crashes; other apps are
 ignored). Then it:
 
-1. saves the crash log to `/data/adb/kashi_rescue/crash-*.txt` (last 5 kept),
+1. saves the crash log to `/data/adb/systemui_rescue/crash-*.txt` (last 5 kept),
 2. works out whose code crashed, SystemUI's or the plugin's (see below),
 3. puts back the last good copy of that one; only apks that changed since the last good copy are
    touched, so if only the plugin changed, SystemUI is left alone and the other way round,
@@ -47,19 +47,19 @@ fixed SystemUI to get rid of it for good.
 
 ## Install
 
-Flash `kashi_rescue.zip` (from Releases) in KernelSU or Magisk. The watchdog starts on every boot.
+Flash `SystemUI-Rescue-<version>.zip` (from Releases) in KernelSU or Magisk. The watchdog starts on every boot.
 
 Start it right away without rebooting:
 
 ```sh
-su -c sh /data/adb/modules_update/kashi_rescue/service.sh
+su -c sh /data/adb/modules_update/systemui_rescue/service.sh
 ```
 
-(after the next reboot the module lives in `/data/adb/modules/kashi_rescue`).
+(after the next reboot the module lives in `/data/adb/modules/systemui_rescue`).
 
 ## Commands
 
-As root: `sh /data/adb/modules/kashi_rescue/kashi_rescue.sh <command>`
+As root: `sh /data/adb/modules/systemui_rescue/systemui-rescue.sh <command>`
 
 | Command | What it does |
 | --- | --- |
@@ -69,8 +69,8 @@ As root: `sh /data/adb/modules/kashi_rescue/kashi_rescue.sh <command>`
 | `restore-plugin` | put back the saved plugin now |
 | `stock-plugin` | remove the plugin update (stock plugin) |
 
-Pause the watchdog: `touch /data/adb/kashi_rescue/disable` (delete the file to resume).
-Log: `/data/adb/kashi_rescue/rescue.log`.
+Pause the watchdog: `touch /data/adb/systemui_rescue/disable` (delete the file to resume).
+Log: `/data/adb/systemui_rescue/rescue.log`.
 
 ## Limits
 
