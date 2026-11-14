@@ -1,0 +1,2 @@
+*.sh text eol=lf
+module/META-INF/** text eol=lf
