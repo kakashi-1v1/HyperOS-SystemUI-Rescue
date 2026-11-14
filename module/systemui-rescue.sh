@@ -255,14 +255,26 @@ SAVE_EVERY=${SAVE_EVERY:-600}
 
 crash_events() {
   # -v epoch: first field = seconds; start from "now" so old crashes are not replayed
+  # One dying process can log several fatal lines (FATAL EXCEPTION on more threads + a native
+  # tombstone), so each SystemUI PID counts once: the crashed PID comes from the message itself
+  # ("Process: <pkg>, PID: N" / "pid: N, tid: ..., name: ... >>> <pkg> <<<"), not the log header.
   start=$(date +%s)
+  seen=""
   logcat -b crash -v epoch -T 1 2>/dev/null | while read -r ts rest; do
     sec=${ts%%.*}
     case "$sec" in ''|*[!0-9]*) continue ;; esac
     [ "$sec" -lt "$start" ] && continue
     case "$rest" in
-      *"Process: $SUI, PID"*|*">>> $SUI <<<"*) echo "$sec" ;;
+      *"Process: $SUI, PID: "*) p=${rest##*"Process: $SUI, PID: "} ;;
+      *">>> $SUI <<<"*) p=${rest##*"pid: "} ;;
+      *) continue ;;
     esac
+    p=${p%%[!0-9]*}
+    if [ -n "$p" ]; then
+      case " $seen " in *" $p "*) continue ;; esac
+      seen=$(echo "$p $seen" | cut -d' ' -f1-8)
+    fi
+    echo "$sec"
   done
 }
 

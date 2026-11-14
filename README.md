@@ -19,7 +19,7 @@ update (only when it is an update in `/data/app`) are copied to `/data/adb/syste
 A stamp (path, size, modification time) next to each copy means an apk is only copied again after you
 install a new one.
 
-**Crash loop = 3 SystemUI crashes within 2 minutes** (Java crashes and native crashes; other apps are
+**Crash loop = 3 SystemUI crashes within 2 minutes** (Java crashes and native crashes, each SystemUI process counted once even when it logs several fatal errors; other apps are
 ignored). Then it:
 
 1. saves the crash log to `/data/adb/systemui_rescue/crash-*.txt` (last 5 kept),
