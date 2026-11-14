@@ -23,14 +23,27 @@ install a new one.
 ignored). Then it:
 
 1. saves the crash log to `/data/adb/kashi_rescue/crash-*.txt` (last 5 kept),
-2. puts back the last good copy of whichever changed most recently, SystemUI or the plugin,
-3. if SystemUI still loops, puts back the other one,
-4. as a last resort removes the plugin update (stock plugin),
-5. restarts SystemUI and posts a notification saying what was restored.
+2. works out whose code crashed, SystemUI's or the plugin's (see below),
+3. puts back the last good copy of that one; only apks that changed since the last good copy are
+   touched, so if only the plugin changed, SystemUI is left alone and the other way round,
+4. if SystemUI still loops, puts back the other one (if it changed too),
+5. as a last resort removes the plugin update (stock plugin),
+6. restarts SystemUI and posts a notification saying what was restored.
+
+**Whose code crashed.** From the newest SystemUI crash in the crash log:
+a native backtrace that runs through the plugin apk means the plugin; otherwise the stack-frame classes
+(Java frames, and the Java method names of JIT/odex frames in native backtraces) are looked up in both
+apks, framework classes skipped, and the first class that only one of the two apks contains decides.
+If it cannot tell, the most recently changed apk goes first.
 
 SystemUI is restored the safe way: the good apk is written next to the old one and swapped in with
 `mv`, the stock `oat/` folder and stale dalvik-cache code are removed, the partition goes back to
 read-only and SystemUI is recompiled in the background.
+
+**Read-only partitions** (EROFS, shared blocks; `/system_ext` cannot be remounted read-write): the good
+SystemUI is bind-mounted over the bad one instead. That needs no write access and works at once, but
+lasts until reboot; after a reboot the crash loop is caught again and the bind is redone. Install a
+fixed SystemUI to get rid of it for good.
 
 ## Install
 

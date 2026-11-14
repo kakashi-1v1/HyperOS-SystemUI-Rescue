@@ -89,6 +89,22 @@ make_ro() {
   is_rw "$1" && mount -o remount,ro "$1" 2>/dev/null
 }
 
+is_mountpoint() { awk -v m="$1" '$5 == m { f = 1 } END { exit !f }' /proc/self/mountinfo; }
+
+# read-only partition (EROFS, shared blocks...): put the good apk over the bad one with a bind mount.
+# No write needed, works at once, lasts until reboot (after a reboot the loop is caught again).
+bind_sysui() {
+  good=$1; path=$2
+  chmod 644 "$good"; chcon u:object_r:system_file:s0 "$good" 2>/dev/null
+  mount --bind "$good" "$path" || { log "cannot remount $(mount_of "$path") rw and the bind mount failed"; return 1; }
+  cache=$(echo "${path#/}" | tr "/" "@")
+  rm -f /data/dalvik-cache/*/"$cache"@classes.* 2>/dev/null
+  stamp "$path" > "$G/systemui.src"
+  log "partition is read-only: bind-mounted the good SystemUI over $path (until reboot)"
+  restart_sui
+  return 0
+}
+
 restore_sysui() {
   good=$G/systemui.apk
   [ -f "$good" ] || { log "no good SystemUI saved"; return 1; }
@@ -97,8 +113,12 @@ restore_sysui() {
     /data/*|"") log "SystemUI is not a system apk ($path), not restoring"; return 1 ;;
   esac
   dir=${path%/*}
+  # an older bind mount from a previous rescue would hide the swap
+  is_mountpoint "$path" && umount "$path" 2>/dev/null
   mp=$(mount_of "$path")
-  mount -o remount,rw "$mp" 2>/dev/null || { log "cannot remount $mp rw"; return 1; }
+  if ! mount -o remount,rw "$mp" 2>/dev/null; then
+    bind_sysui "$good" "$path"; return $?
+  fi
   ok=1
   if cp -f "$good" "$path.new"; then
     chown 0:0 "$path.new"; chmod 644 "$path.new"
@@ -150,11 +170,45 @@ save_crash_log() {
   log "crash log saved: $f"
 }
 
-# rescue: undo the most recent change first; $D/tried remembers what this crash loop already undid
+# culprit: whose code crashed in the newest SystemUI crash -> "plugin", "sysui" or nothing (unknown).
+#  native: backtrace goes through the plugin apk path, or its JIT/odex frames name a class (as java)
+#  java:   first stack-frame class (frameworks skipped) that only ONE of the two apks contains
+culprit() {
+  blk=$(logcat -b crash -d -v epoch -t 800 2>/dev/null | awk -v s="$SUI" '
+    index($0, "Process: " s ", PID") || index($0, ">>> " s " <<<") { n = 0; pid = $2; on = 1 }
+    on && $2 == pid { L[n++] = $0 }
+    END { for (i = 0; i < n; i++) print L[i] }')
+  [ -n "$blk" ] || return 0
+  case "$blk" in *"$PLG"*) echo plugin; return 0 ;; esac
+  w=$D/culprit; rm -rf "$w"; mkdir -p "$w"
+  # java: "at pkg.Class.method(File.java:1)"   native JIT/odex frame: "(pkg.Class.method+123)"
+  echo "$blk" | sed -n -e 's/.*[[:space:]]at \([A-Za-z0-9_$.]*\)\.[^.(]*(.*/\1/p' \
+    -e 's/.*(\([A-Za-z0-9_$]*\.[A-Za-z0-9_$.]*\)\.[A-Za-z0-9_$<>]*+[0-9]*)$/\1/p' \
+    | grep -vE '^(java|javax|android|androidx|dalvik|libcore|kotlin|kotlinx|sun|com\.android\.internal)\.' \
+    | awk '!seen[$0]++' | head -20 | sed 's|\.|/|g; s|^|L|; s|$|;|' > "$w/frames"
+  if [ -s "$w/frames" ]; then
+    unzip -p "$(apk_of $SUI)" 'classes*.dex' > "$w/sui.dex" 2>/dev/null
+    pl=$(apk_of $PLG); : > "$w/plg.dex"
+    [ -n "$pl" ] && unzip -p "$pl" 'classes*.dex' > "$w/plg.dex" 2>/dev/null
+    while read -r d; do
+      a=0; b=0
+      grep -qaF "$d" "$w/sui.dex" && a=1
+      grep -qaF "$d" "$w/plg.dex" && b=1
+      [ $a = 1 ] && [ $b = 0 ] && { echo sysui; break; }
+      [ $b = 1 ] && [ $a = 0 ] && { echo plugin; break; }
+    done < "$w/frames"
+  fi
+  rm -rf "$w"
+}
+
+# rescue: undo the change whose code crashed (culprit), else the newest change; $D/tried remembers what
+# this crash loop already undid
 # (cleared when the next good copies are saved)
 rescue() {
   TRIED=$(cat "$D/tried" 2>/dev/null)
   save_crash_log
+  c=$(culprit)
+  [ -n "$c" ] && log "crash is in the $c code"
   s=0; p=0
   changed systemui $SUI && s=1
   changed plugin $PLG && p=1
@@ -162,7 +216,11 @@ rescue() {
   case " $TRIED " in *" plugin "*) p=0 ;; esac
   order=""
   if [ $s = 1 ] && [ $p = 1 ]; then
-    if [ "$(mtime_of "$(apk_of $PLG)")" -gt "$(mtime_of "$(apk_of $SUI)")" ]; then order="plugin sysui"; else order="sysui plugin"; fi
+    # both changed: the one whose code crashed first, else the newest change
+    if [ "$c" = plugin ]; then order="plugin sysui"
+    elif [ "$c" = sysui ]; then order="sysui plugin"
+    elif [ "$(mtime_of "$(apk_of $PLG)")" -gt "$(mtime_of "$(apk_of $SUI)")" ]; then order="plugin sysui"
+    else order="sysui plugin"; fi
   elif [ $s = 1 ]; then order="sysui"
   elif [ $p = 1 ]; then order="plugin"
   fi
